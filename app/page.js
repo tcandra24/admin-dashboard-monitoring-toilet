@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabaseClient';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, Label,
 } from 'recharts';
+import * as XLSX from 'xlsx';
 
 // these mirror the actual limits enforced by handle_tap() in the database -
 // keep them in sync if the SQL constants ever change
@@ -73,6 +74,27 @@ function formatMinutes(mins) {
   const m = Math.floor(totalSeconds / 60);
   const s = totalSeconds % 60;
   return `${m}m ${s}s`;
+}
+
+// builds the export filename from the currently selected period - a single
+// date (e.g. "2026-10-13") when the range covers one day, or "start-end"
+// when it spans a range
+function getExportFilename(period, customFrom, customTo, pickedDate) {
+  const range = getPeriodRange(period, customFrom, customTo, pickedDate);
+  if (!range) return 'export';
+
+  const fmt = (d) => {
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  };
+
+  const startDate = new Date(range.start);
+  // range.end is exclusive (start of the day after the last included day)
+  const endInclusive = new Date(new Date(range.end).getTime() - 24 * 60 * 60 * 1000);
+
+  const startStr = fmt(startDate);
+  const endStr = fmt(endInclusive);
+  return startStr === endStr ? startStr : `${startStr}-${endStr}`;
 }
 
 const PERIODS = [
@@ -539,6 +561,26 @@ export default function Dashboard() {
     setTapMax('');
   }
 
+  // exports the currently filtered/sorted table (sortedStats already
+  // reflects Cari Nama + Filter Lainnya) to an .xlsx file named after the
+  // selected period
+  function handleExportExcel() {
+    const rows = sortedStats.map((row) => ({
+      Nama: row.name || '(tanpa nama)',
+      Departemen: row.departemen || '-',
+      'Total Durasi (menit)': row.total_minutes != null ? Number((row.total_minutes).toFixed(2)) : 0,
+      [`${periodLabel} (menit)`]: row.avg_period_minutes != null ? Number((row.avg_period_minutes).toFixed(2)) : 0,
+      'Jumlah Tap': row.total_taps ?? 0,
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(rows);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Data');
+
+    const filename = getExportFilename(period, customFrom, customTo, pickedDate);
+    XLSX.writeFile(workbook, `${filename}.xlsx`);
+  }
+
   function toggleSort(key) {
     if (sortKey === key) {
       setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
@@ -838,6 +880,21 @@ export default function Dashboard() {
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
+            <button
+              onClick={handleExportExcel}
+              disabled={sortedStats.length === 0}
+              style={{
+                padding: '8px 16px', borderRadius: 6, border: 'none', whiteSpace: 'nowrap',
+                background: sortedStats.length === 0 ? t.textDim : '#16a34a',
+                color: '#fff', fontWeight: 600, fontSize: 13,
+                cursor: sortedStats.length === 0 ? 'not-allowed' : 'pointer',
+              }}
+            >
+              Export ke Excel
+            </button>
           </div>
 
           <div style={{ overflowX: 'auto', marginBottom: 24 }}>

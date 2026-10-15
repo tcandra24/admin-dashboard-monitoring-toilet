@@ -16,6 +16,7 @@ const DEFAULT_MAX_FREQUENCY = Number(process.env.NEXT_PUBLIC_MAX_FREQUENCY || 5)
 // (matches the plain `timestamp` columns storing Jakarta local time already)
 function toLocalTimestamp(d) {
   const pad = (n) => String(n).padStart(2, "0");
+
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
